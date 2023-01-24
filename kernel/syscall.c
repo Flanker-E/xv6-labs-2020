@@ -170,7 +170,7 @@ syscall(void)
     p->trapframe->a0 = -1;
   }
   if(((1<<num)&p->mask)!=0){
-    printf("%d : syscall %s -> %d\n",
+    printf("%d: syscall %s -> %d\n",
             p->pid, syscall_name[num-1], p->trapframe->a0);
   }
 }
