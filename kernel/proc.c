@@ -694,3 +694,29 @@ procdump(void)
     printf("\n");
   }
 }
+
+uint64
+num_proc(void){
+  static char *states[] = {
+  [UNUSED]    "unused",
+  [SLEEPING]  "sleep ",
+  [RUNNABLE]  "runble",
+  [RUNNING]   "run   ",
+  [ZOMBIE]    "zombie"
+  };
+  struct proc *p;
+  // char *state;
+  uint64 num=0;
+
+  // printf("\n");
+  for(p = proc; p < &proc[NPROC]; p++){
+    if(p->state != UNUSED)
+      num++;//continue;
+    // if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
+    // else
+    //   num++;//continue;
+    // printf("%d %s %s", p->pid, state, p->name);
+    // printf("\n");
+  }
+  return num;
+}
