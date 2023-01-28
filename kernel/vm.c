@@ -440,3 +440,80 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+void vmprint_helper(pagetable_t pagetable, int level){
+  // for(int level = 2; level > 0; level--) {
+  //   pte_t pte =pagetable[i];
+  //   // pte_t *pte = &pagetable[];
+  //   if(pte & PTE_V) {
+  //     pagetable = (pagetable_t)PTE2PA(*pte);
+  //   } else {
+  //     if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
+  //       return 0;
+  //     memset(pagetable, 0, PGSIZE);
+  //     *pte = PA2PTE(pagetable) | PTE_V;
+  //   }
+  // }
+  for(int i=0;i<512;i++){
+    pte_t pte = pagetable[i];
+    if((pte & PTE_V)) {
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      printf("..");
+      for(int j=0;j<level;j++){
+        printf(" ..");
+      }
+      printf("%d: pte %p pa %p\n", i, pte, child);
+      if(level<2)
+        vmprint_helper((pagetable_t)child,level+1);
+      // pagetable[i] = 0;
+    // } else if(pte & PTE_V){
+    //   panic("vmprint: leaf");
+    }
+  }
+}
+
+void
+vmprint(pagetable_t pagetable){
+  printf("page table %p\n",pagetable);
+  vmprint_helper(pagetable,0);
+}
+
+// Recursively free page-table pages.
+// All leaf mappings must already have been removed.
+// void
+// freewalk(pagetable_t pagetable)
+// {
+//   // there are 2^9 = 512 PTEs in a page table.
+//   for(int i = 0; i < 512; i++){
+//     pte_t pte = pagetable[i];
+//     if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+//       // this PTE points to a lower-level page table.
+//       uint64 child = PTE2PA(pte);
+//       freewalk((pagetable_t)child);
+//       pagetable[i] = 0;
+//     } else if(pte & PTE_V){
+//       panic("freewalk: leaf");
+//     }
+//   }
+//   kfree((void*)pagetable);
+// }
+
+// pte_t *
+// walk(pagetable_t pagetable, uint64 va, int alloc)
+// {
+//   if(va >= MAXVA)
+//     panic("walk");
+
+//   for(int level = 2; level > 0; level--) {
+//     pte_t *pte = &pagetable[PX(level, va)];
+//     if(*pte & PTE_V) {
+//       pagetable = (pagetable_t)PTE2PA(*pte);
+//     } else {
+//       if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
+//         return 0;
+//       memset(pagetable, 0, PGSIZE);
+//       *pte = PA2PTE(pagetable) | PTE_V;
+//     }
+//   }
+//   return &pagetable[PX(0, va)];
+// }
