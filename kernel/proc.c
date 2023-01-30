@@ -113,9 +113,15 @@ found:
     release(&p->lock);
     return 0;
   }
-  printf("alloc proc kernel page\n");
+  // printf("alloc proc kernel page\n");
   // An kernel page table.
   p->kpagetable = kvminit_proc();
+  if(p->kpagetable == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
   // kernel stack
   char *pa = kalloc();
   if(pa == 0)
@@ -123,7 +129,7 @@ found:
   uint64 va = KSTACK((int) (p - proc));
   kvmmap_proc(p->kpagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
   p->kstack = va;
-  printf("alloc proc user page\n");
+  // printf("alloc proc user page\n");
 
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
@@ -161,14 +167,14 @@ freeproc(struct proc *p)
   }
   p->kstack = 0;
 
+  if(p->pagetable)
+    proc_freepagetable(p->pagetable, p->sz);
+
   // free kernel page table without freeing leaf physical memory pages
   if(p->kpagetable)
     freewalk_proc(p->kpagetable);
+    
   p->kpagetable = 0;
-
-  if(p->pagetable)
-    proc_freepagetable(p->pagetable, p->sz);
-  
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -219,8 +225,8 @@ proc_pagetable(struct proc *p)
 void
 proc_freepagetable_withoutleaf(pagetable_t pagetable)
 {
-  // uvmunmap(pagetable, TRAMPOLINE, 1, 0);
-  // uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+  uvmunmap(pagetable, TRAPFRAME, 1, 0);
   // uvmunmap(pagetable, 0, 1, 1);
   // kfree((void*)pagetable);
   uvmfree_withoutleaf(pagetable);

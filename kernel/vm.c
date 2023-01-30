@@ -392,7 +392,7 @@ void
 uvmfree_withoutleaf(pagetable_t pagetable)
 {
   // if(sz > 0)
-  // uvmunmap(pagetable, 0, 1, 1);
+  uvmunmap(pagetable, 0, 1, 1);
   freewalk_proc(pagetable);
 }
 
