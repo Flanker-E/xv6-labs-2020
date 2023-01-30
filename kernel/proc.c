@@ -20,6 +20,7 @@ static void wakeup1(struct proc *chan);
 static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
+// extern pagetable_t kernel_pagetable;
 
 // initialize the proc table at boot time.
 void
@@ -34,12 +35,12 @@ procinit(void)
       // Allocate a page for the process's kernel stack.
       // Map it high in memory, followed by an invalid
       // guard page.
-      char *pa = kalloc();
-      if(pa == 0)
-        panic("kalloc");
-      uint64 va = KSTACK((int) (p - proc));
-      kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
-      p->kstack = va;
+      // char *pa = kalloc();
+      // if(pa == 0)
+      //   panic("kalloc");
+      // uint64 va = KSTACK((int) (p - proc));
+      // kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+      // p->kstack = va;
   }
   kvminithart();
 }
@@ -112,6 +113,17 @@ found:
     release(&p->lock);
     return 0;
   }
+  printf("alloc proc kernel page\n");
+  // An kernel page table.
+  p->kpagetable = kvminit_proc();
+  // kernel stack
+  char *pa = kalloc();
+  if(pa == 0)
+    panic("kalloc");
+  uint64 va = KSTACK((int) (p - proc));
+  kvmmap_proc(p->kpagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+  p->kstack = va;
+  printf("alloc proc user page\n");
 
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
@@ -139,8 +151,24 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+
+  if(p->kstack){
+    pte_t* pte=walk(p->kpagetable,p->kstack,0);
+    if(pte==0)
+      panic("freeproc: walk");
+    kfree((void *)PTE2PA(*pte));
+    // uvmunmap(p->kstack, )
+  }
+  p->kstack = 0;
+
+  // free kernel page table without freeing leaf physical memory pages
+  if(p->kpagetable)
+    freewalk_proc(p->kpagetable);
+  p->kpagetable = 0;
+
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
+  
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -183,6 +211,19 @@ proc_pagetable(struct proc *p)
   }
 
   return pagetable;
+}
+
+
+// Free a process's page table, and free the
+// physical memory it refers to.
+void
+proc_freepagetable_withoutleaf(pagetable_t pagetable)
+{
+  // uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+  // uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  // uvmunmap(pagetable, 0, 1, 1);
+  // kfree((void*)pagetable);
+  uvmfree_withoutleaf(pagetable);
 }
 
 // Free a process's page table, and free the
@@ -463,7 +504,7 @@ scheduler(void)
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
-    
+    // printf("scheduler\n");
     int found = 0;
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
@@ -473,19 +514,31 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        
+        // load kernel page table into satp
+        w_satp(MAKE_SATP(p->kpagetable));
+        sfence_vma();
+        
         swtch(&c->context, &p->context);
+        
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
-
+        // w_satp(MAKE_SATP(kernel_pagetable));
+        // sfence_vma();
+        kvminithart();
         found = 1;
       }
       release(&p->lock);
     }
 #if !defined (LAB_FS)
     if(found == 0) {
+      // printf("scheduler nothing to do\n");
       intr_on();
+      // scheduler() should use kernel_pagetable when no process is running.
+      // w_satp(MAKE_SATP(kernel_pagetable));
+      // sfence_vma();
       asm volatile("wfi");
     }
 #else
