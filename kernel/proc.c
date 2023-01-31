@@ -138,6 +138,12 @@ found:
     release(&p->lock);
     return 0;
   }
+  
+  // for(int i = 0; i < p->sz; i += PGSIZE){
+  //   kvmmap_proc(p->kpagetable, i, 
+  //   *walk(p->pagetable,i,0), PGSIZE, PTE_R | PTE_W | PTE_X & (!PTE_U)) ;
+  // }
+  // printf("alloc map kernel user page\n");
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
@@ -154,6 +160,7 @@ found:
 static void
 freeproc(struct proc *p)
 {
+  // printf("begin free proc\n");
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
@@ -173,7 +180,7 @@ freeproc(struct proc *p)
   // free kernel page table without freeing leaf physical memory pages
   if(p->kpagetable)
     freewalk_proc(p->kpagetable);
-    
+  // printf("end free proc\n");
   p->kpagetable = 0;
   p->pagetable = 0;
   p->sz = 0;
@@ -267,7 +274,7 @@ userinit(void)
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
-
+  uvmmap(p->pagetable, p->kpagetable, 0, p->sz);
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
   p->trapframe->sp = PGSIZE;  // user stack pointer
@@ -289,14 +296,23 @@ growproc(int n)
   struct proc *p = myproc();
 
   sz = p->sz;
+  if(sz + n >= PLIC)
+    return -1;
   if(n > 0){
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
+    uvmmap(p->pagetable, p->kpagetable, sz - n, sz);
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
   p->sz = sz;
+  
+  // for(int i = 0; i < sz; i += PGSIZE){
+  //   kvmmap_proc(p->kpagetable, i, 
+  //   *walk(p->pagetable,i,0), PGSIZE, PTE_R | PTE_W |PTE_X & (!PTE_U));
+  // }
+  
   return 0;
 }
 
@@ -320,6 +336,14 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+
+  
+  // for(int i = 0; i < p->sz; i += PGSIZE){
+  //   // int idx=i/PGSIZE;
+  //   kvmmap_proc(np->kpagetable, i, 
+  //   *walk(np->pagetable,i,0), PGSIZE, PTE_R | PTE_W);
+  // }
+
   np->sz = p->sz;
 
   np->parent = p;
@@ -335,7 +359,9 @@ fork(void)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
-
+  
+  uvmmap(np->pagetable, np->kpagetable, 0, p->sz);
+  
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;

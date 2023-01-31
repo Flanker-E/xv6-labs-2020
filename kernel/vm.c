@@ -218,7 +218,28 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   }
   return 0;
 }
-
+// map pages from user pagetable to kernel pagetable, cancel the permission of PTE_U
+void
+uvmmap(pagetable_t pagetable_from, pagetable_t pagetable_to, uint64 sz_from, uint64 sz_to){
+  // assign new pages that overlap with old
+  pte_t *pte_from, *pte_to;
+  pte_t pa;
+  int perm;
+  
+  sz_from=PGROUNDUP(sz_from);
+  // sz_to=PGROUNDUP(sz_to);
+  if(sz_to<=sz_from)
+    return;
+  for(uint64 i = sz_from; i < sz_to; i += PGSIZE){
+    if((pte_from = walk(pagetable_from, i, 0))==0)
+      panic("uvmmap: walk from");
+    if((pte_to = walk(pagetable_to, i, 1))==0)
+      panic("uvmmap: walk to");
+    pa = PTE2PA(*pte_from) ;
+    perm = PTE_FLAGS(*pte_from) & (~PTE_U);
+    *pte_to = PA2PTE(pa) | perm;
+  }
+}
 // Remove npages of mappings starting from va. va must be
 // page-aligned. The mappings must exist.
 // Optionally free the physical memory.
@@ -310,6 +331,7 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 uint64
 uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
+  // printf("uvmdealloc\n");
   if(newsz >= oldsz)
     return oldsz;
 
@@ -381,6 +403,7 @@ freewalk_proc(pagetable_t pagetable)
 void
 uvmfree(pagetable_t pagetable, uint64 sz)
 {
+  // printf("uvmfree\n");
   if(sz > 0)
     uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
   freewalk(pagetable);
@@ -476,6 +499,9 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
+  
+  return copyin_new(pagetable,dst,srcva,len);
+
   uint64 n, va0, pa0;
 
   while(len > 0){
@@ -502,6 +528,8 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
+  return copyinstr_new(pagetable,dst,srcva,max);
+
   uint64 n, va0, pa0;
   int got_null = 0;
 

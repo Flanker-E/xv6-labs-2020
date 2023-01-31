@@ -20,7 +20,7 @@ exec(char *path, char **argv)
   struct proghdr ph;
   pagetable_t pagetable = 0, oldpagetable;
   struct proc *p = myproc();
-
+  // printf("begin exec\n");
   begin_op();
 
   if((ip = namei(path)) == 0){
@@ -38,6 +38,9 @@ exec(char *path, char **argv)
   if((pagetable = proc_pagetable(p)) == 0)
     goto bad;
 
+  // kvmmap_proc(p->kpagetable, pagetable[0], 
+  //   *walk(pagetable,0,0), PGSIZE, PTE_R | PTE_W);
+
   // Load program into memory.
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph))
@@ -50,6 +53,8 @@ exec(char *path, char **argv)
       goto bad;
     uint64 sz1;
     if((sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz)) == 0)
+      goto bad;
+    if(sz1>=PLIC)
       goto bad;
     sz = sz1;
     if(ph.vaddr % PGSIZE != 0)
@@ -74,7 +79,7 @@ exec(char *path, char **argv)
   uvmclear(pagetable, sz-2*PGSIZE);
   sp = sz;
   stackbase = sp - PGSIZE;
-
+  uvmmap(pagetable, p->kpagetable, 0, sz);
   // Push argument strings, prepare rest of stack in ustack.
   for(argc = 0; argv[argc]; argc++) {
     if(argc >= MAXARG)
@@ -112,6 +117,11 @@ exec(char *path, char **argv)
   oldpagetable = p->pagetable;
   p->pagetable = pagetable;
   p->sz = sz;
+
+  // for(int i = 0; i < sz; i += PGSIZE){
+  //   kvmmap_proc(p->kpagetable, i, 
+  //   *walk(p->pagetable,i,0), PGSIZE, PTE_R | PTE_W |PTE_X & (!PTE_U));
+  // }
   p->trapframe->epc = elf.entry;  // initial program counter = main
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
@@ -119,6 +129,7 @@ exec(char *path, char **argv)
   if(p->pid==1){
     vmprint(p->pagetable);
   }
+  // printf("end exec\n");
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:
