@@ -89,6 +89,8 @@ test1()
     if(count >= 10)
       break;
     foo(i, &j);
+    // if(j%1000000==0)
+    //   printf(" j %d",j);
   }
   if(count < 10){
     printf("\ntest1 failed: too few calls to the handler\n");
@@ -100,6 +102,7 @@ test1()
     // occurred; another is that that registers may not be
     // restored correctly, causing i or j or the address ofj
     // to get an incorrect value.
+    printf("\ni=%d,j=%d",i,j);
     printf("\ntest1 failed: foo() executed fewer times than it was called\n");
   } else {
     printf("test1 passed\n");

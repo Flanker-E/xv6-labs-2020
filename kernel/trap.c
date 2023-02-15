@@ -67,6 +67,48 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+    if(which_dev == 2 && p->in_handle == 0){
+      p->left +=1;
+      if((p->left==p->interval)&&(p->interval!=0)){
+        p->left=0;
+        p->in_handle=1;
+        p->last_tramp=*(p->trapframe);
+        // p->last_tramp.ra=p->trapframe->ra;
+        // p->last_tramp.sp=p->trapframe->sp;
+        // p->last_tramp.gp=p->trapframe->gp;
+        // p->last_tramp.tp=p->trapframe->tp;
+        // p->last_tramp.t0=p->trapframe->t0;
+        // p->last_tramp.t1=p->trapframe->t1;
+        // p->last_tramp.t2=p->trapframe->t2;
+        // p->last_tramp.s0=p->trapframe->s0;
+        // p->last_tramp.s1=p->trapframe->s1;
+        // p->last_tramp.a0=p->trapframe->a0;
+        // p->last_tramp.a1=p->trapframe->a1;
+        // p->last_tramp.a2=p->trapframe->a2;
+        // p->last_tramp.a3=p->trapframe->a3;
+        // p->last_tramp.a4=p->trapframe->a4;
+        // p->last_tramp.a5=p->trapframe->a5;
+        // p->last_tramp.a6=p->trapframe->a6;
+        // p->last_tramp.a7=p->trapframe->a7;
+        // p->last_tramp.s2=p->trapframe->s2;
+        // p->last_tramp.s3=p->trapframe->s3;
+        // p->last_tramp.s4=p->trapframe->s4;
+        // p->last_tramp.s5=p->trapframe->s5;
+        // p->last_tramp.s6=p->trapframe->s6;
+        // p->last_tramp.s7=p->trapframe->s7;
+        // p->last_tramp.s8=p->trapframe->s8;
+        // p->last_tramp.s9=p->trapframe->s9;
+        // p->last_tramp.s10=p->trapframe->s10;
+        // p->last_tramp.s11=p->trapframe->s11;
+        // p->last_tramp.t3=p->trapframe->t3;
+        // p->last_tramp.t4=p->trapframe->t4;
+        // p->last_tramp.t5=p->trapframe->t5;
+        // p->last_tramp.t6=p->trapframe->t6;
+        p->last_context=p->context;
+        p->last_pc = p->trapframe->epc;
+        p->trapframe->epc = (uint64)p->handler;
+      }
+    }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
@@ -77,8 +119,21 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+    // if(p->interval!=0){
+    //   if(p->left>0)
+    //     p->left--;
+    //   else{
+    //     //ready return
+    //     if(p->in_handle==0){
+          
+    //       // usertrapret();
+    //     }
+    //   }
+    // }
+    
     yield();
+    }
 
   usertrapret();
 }

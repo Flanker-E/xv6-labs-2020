@@ -127,6 +127,13 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  memset(&p->last_context, 0, sizeof(p->context));
+  memset(&p->last_tramp, 0, sizeof(p->last_tramp));
+  p->interval=0;
+  p->left=0;
+  p->handler=0;
+  p->in_handle=0;
+
   return p;
 }
 
@@ -696,4 +703,58 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+int
+sigalarm(int interval, void (*handler)()){
+  struct proc *p = myproc();
+  // if(p->interval==0)
+  //   p->left=p->interval-1;
+  p->interval=interval;
+  p->handler=handler;
+  return 0;
+}
+
+int
+sigreturn(void){
+  struct proc *p = myproc();
+  // p->interval=interval;
+  
+  // p->left=p->interval-1;
+  p->context=p->last_context;
+  *(p->trapframe)=p->last_tramp;
+  // p->trapframe->ra = p->last_tramp.ra;
+  // p->trapframe->sp = p->last_tramp.sp;
+  // p->trapframe->gp = p->last_tramp.gp;
+  // p->trapframe->tp = p->last_tramp.tp;
+  // p->trapframe->t0 = p->last_tramp.t0;
+  // p->trapframe->t1 = p->last_tramp.t1;
+  // p->trapframe->t2 = p->last_tramp.t2;
+  // p->trapframe->s0 = p->last_tramp.s0;
+  // p->trapframe->s1 = p->last_tramp.s1;
+  // p->trapframe->a0 = p->last_tramp.a0;
+  // p->trapframe->a1 = p->last_tramp.a1;
+  // p->trapframe->a2 = p->last_tramp.a2;
+  // p->trapframe->a3 = p->last_tramp.a3;
+  // p->trapframe->a4 = p->last_tramp.a4;
+  // p->trapframe->a5 = p->last_tramp.a5;
+  // p->trapframe->a6 = p->last_tramp.a6;
+  // p->trapframe->a7 = p->last_tramp.a7;
+  // p->trapframe->s2 = p->last_tramp.s2;
+  // p->trapframe->s3 = p->last_tramp.s3;
+  // p->trapframe->s4 = p->last_tramp.s4;
+  // p->trapframe->s5 = p->last_tramp.s5;
+  // p->trapframe->s6 = p->last_tramp.s6;
+  // p->trapframe->s7 = p->last_tramp.s7;
+  // p->trapframe->s8 = p->last_tramp.s8;
+  // p->trapframe->s9 = p->last_tramp.s9;
+  // p->trapframe->s10 = p->last_tramp.s10;
+  // p->trapframe->s11 = p->last_tramp.s11;
+  // p->trapframe->t3 = p->last_tramp.t3;
+  // p->trapframe->t4 = p->last_tramp.t4;
+  // p->trapframe->t5 = p->last_tramp.t5;
+  // p->trapframe->t6 = p->last_tramp.t6;
+  p->trapframe->epc=p->last_pc;
+  p->in_handle=0;
+  return 0;
 }
