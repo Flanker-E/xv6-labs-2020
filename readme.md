@@ -7,6 +7,6 @@ traps
 20230215 alarm  
 lazy  
 20230215 eliminate allocation from sbrk  
-
+20230216 lazy allocation  
 cow  
 
