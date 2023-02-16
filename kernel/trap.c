@@ -65,6 +65,41 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(r_scause() == 13 || r_scause() == 15){
+    // lazy alloc page fault
+    // printf("page fault\n");
+    uint64 oldsz = r_stval();
+    if(oldsz>p->sz ||oldsz < p->trapframe->sp){
+      //kill process
+      kill(p->pid);
+      p->killed = 1;
+      exit(-1);
+      // panic("usertrap: RAM over use");
+      }
+    pagetable_t pagetable = p->pagetable;
+    oldsz = PGROUNDDOWN(oldsz);
+    char *mem;
+    // pte_t *pte;
+    mem = kalloc();
+    if(mem == 0){
+      kill(p->pid);
+      p->killed = 1;
+      exit(-1);
+      // uvmdealloc(pagetable, oldsz, oldsz+1);
+      // return 0;
+    }
+    memset(mem, 0, PGSIZE);
+    // if((pte = walk(pagetable, oldsz, 0)) == 0)
+    //   panic("usertrap: pte should exist");
+    // pa = PTE2PA(*pte);
+    // memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(pagetable, oldsz, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+      printf("usertrap: error map a page\n");
+      kfree(mem);
+      uvmdealloc(pagetable, oldsz, oldsz+PGSIZE);
+      panic("usertrap: lazy alloc one page fail");
+    }
+    // printf("page fault handled\n");
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {

@@ -2231,12 +2231,13 @@ sbrkarg(char *s)
     printf("%s: open sbrk failed\n", s);
     exit(1);
   }
+  printf("sbrkarg\n");
   if ((n = write(fd, a, PGSIZE)) < 0) {
     printf("%s: write sbrk failed\n", s);
     exit(1);
   }
   close(fd);
-
+  printf("sbrkarg\n");
   // test writes to allocated memory
   a = sbrk(PGSIZE);
   if(pipe((int *) a) != 0){

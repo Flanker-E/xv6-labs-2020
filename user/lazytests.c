@@ -14,14 +14,14 @@ void
 sparse_memory(char *s)
 {
   char *i, *prev_end, *new_end;
-  
+  printf("sbrk\n");
   prev_end = sbrk(REGION_SZ);
   if (prev_end == (char*)0xffffffffffffffffL) {
     printf("sbrk() failed\n");
     exit(1);
   }
   new_end = prev_end + REGION_SZ;
-
+  printf("read\n");
   for (i = prev_end + PGSIZE; i < new_end; i += 64 * PGSIZE)
     *(char **)i = i;
 
@@ -31,7 +31,7 @@ sparse_memory(char *s)
       exit(1);
     }
   }
-
+  printf("before exit\n");
   exit(0);
 }
 
@@ -40,7 +40,7 @@ sparse_memory_unmap(char *s)
 {
   int pid;
   char *i, *prev_end, *new_end;
-
+  printf("sbrk unmap\n");
   prev_end = sbrk(REGION_SZ);
   if (prev_end == (char*)0xffffffffffffffffL) {
     printf("sbrk() failed\n");
@@ -50,7 +50,7 @@ sparse_memory_unmap(char *s)
 
   for (i = prev_end + PGSIZE; i < new_end; i += PGSIZE * PGSIZE)
     *(char **)i = i;
-
+  printf("sparse unmap\n");
   for (i = prev_end + PGSIZE; i < new_end; i += PGSIZE * PGSIZE) {
     pid = fork();
     if (pid < 0) {
@@ -69,7 +69,7 @@ sparse_memory_unmap(char *s)
       }
     }
   }
-
+  printf("sparse unmap\n");
   exit(0);
 }
 
@@ -78,7 +78,7 @@ oom(char *s)
 {
   void *m1, *m2;
   int pid;
-
+  printf("oom\n");
   if((pid = fork()) == 0){
     m1 = 0;
     while((m2 = malloc(4096*4096)) != 0){
