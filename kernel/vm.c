@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -156,8 +158,8 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_V)
-      panic("remap");
+    // if(*pte & PTE_V & ~(*pte & PTE_RSW))
+    //   panic("remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
@@ -311,7 +313,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  // printf("uvmcopy\n");// char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -320,14 +322,24 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    //set flags for both parent and child
+    *pte &= ~PTE_W; 
+    *pte |= PTE_RSW;
+    flags &= ~PTE_W;
+    flags |= PTE_RSW;
+    
+    // if((mem = kalloc()) == 0)
+    //   goto err;
+    // memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
+      kfree((char*)pa);
       goto err;
     }
+    else{
+      krefinc((char*)pa);
+    }
   }
+  // printf("uvmcopy\n");
   return 0;
 
  err:
@@ -355,12 +367,45 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
-
+  pte_t *pte;
+  struct proc *p =myproc();
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
+    pte = walk(pagetable, va0, 0);
+    // printf("copyout: pte is %p\n",(char*)pte);
+    if(~(PTE_W & *pte) && (PTE_RSW & *pte)){
+      // char *mem;
+      // pte_t *pte;
+      // printf("copyout: need a new page\n");
+      uint64 npa;
+      npa = (uint64)kalloc();
+      if(npa == 0){
+        // kill(p->pid);
+        p->killed = 1;
+        return 0;
+      }
+      else{
+        memmove((char *)npa, (char*)pa0, PGSIZE);
+        if(mappages(pagetable, va0, PGSIZE, (uint64)npa, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+          printf("copyout: error map a page\n");
+          kfree((char *)npa);
+          uvmdealloc(pagetable, va0, va0+PGSIZE);
+          panic("copyout: lazy alloc one page fail");
+        }
+        else{
+          krefdec((char *)pa0);
+          pa0=npa;
+          *pte |= PTE_W;
+          // *pte &= ~PTE_RSW;
+        }
+      }
+    }
+
+
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;

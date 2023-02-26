@@ -75,29 +75,33 @@ copyout(char *s)
 
   for(int ai = 0; ai < 2; ai++){
     uint64 addr = addrs[ai];
-
+    // printf("copyout0\n");
     int fd = open("README", 0);
     if(fd < 0){
       printf("open(README) failed\n");
       exit(1);
     }
+    // printf("copyout1\n");
     int n = read(fd, (void*)addr, 8192);
     if(n > 0){
       printf("read(fd, %p, 8192) returned %d, not -1 or 0\n", addr, n);
       exit(1);
     }
+    // printf("copyout2\n");
     close(fd);
-
+    // printf("copyout3\n");
     int fds[2];
     if(pipe(fds) < 0){
       printf("pipe() failed\n");
       exit(1);
     }
+    // printf("copyout4\n");
     n = write(fds[1], "x", 1);
     if(n != 1){
       printf("pipe write failed\n");
       exit(1);
     }
+    // printf("copyout5\n");
     n = read(fds[0], (void*)addr, 8192);
     if(n > 0){
       printf("read(pipe, %p, 8192) returned %d, not -1 or 0\n", addr, n);

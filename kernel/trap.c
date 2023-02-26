@@ -65,6 +65,51 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(r_scause() == 13 || r_scause() == 15){
+    uint64 va = r_stval();
+    if(va>p->sz || (va <= PGROUNDDOWN(p->trapframe->sp) && va >= PGROUNDDOWN(p->trapframe->sp) - PGSIZE)){
+      //kill process
+      printf("trap: va out of range\n");
+      // kill(p->pid);
+      p->killed = 1;
+      exit(-1);
+      // panic("usertrap: RAM over use");
+      }
+    pagetable_t pagetable = p->pagetable;
+    va = PGROUNDDOWN(va);
+    // char *mem;
+    pte_t *pte;
+    if((pte = walk(pagetable, va, 0)) == 0)
+      panic("usertrap: pte should exist");
+    if((*pte & PTE_RSW)==0){
+      printf("usertrap(): not COW page %p pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+      p->killed = 1;
+      exit(-1);
+    }
+    uint64 npa, pa;
+    npa = (uint64)kalloc();
+    if(npa == 0){
+      printf("trap: no enough pa\n");
+      kill(p->pid);
+      p->killed = 1;
+      // exit(-1);
+    }
+    else{
+      // memset(mem, 0, PGSIZE);
+      pa = PTE2PA(*pte);
+      memmove((char *)npa, (char*)pa, PGSIZE);
+      if(mappages(pagetable, va, PGSIZE, (uint64)npa, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+        printf("usertrap: error map a page\n");
+        kfree((char *)npa);
+        uvmdealloc(pagetable, va, va+PGSIZE);
+        panic("usertrap: lazy alloc one page fail");
+      }
+      else{
+        krefdec((char *)pa);
+        *pte |= PTE_W;
+      }
+    }
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {

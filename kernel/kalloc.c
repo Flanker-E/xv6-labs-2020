@@ -22,12 +22,60 @@ struct {
   struct spinlock lock;
   struct run *freelist;
 } kmem;
+struct {
+  int inited;
+  struct spinlock lock;
+  uint16 count[(PHYSTOP+4096)/4096];
+}refcount;
 
 void
 kinit()
 {
+  refcount.inited = 0;
   initlock(&kmem.lock, "kmem");
+  initlock(&refcount.lock, "refcount");
+  printf("kinit\n");
   freerange(end, (void*)PHYSTOP);
+  printf("kinit\n");
+  
+  memset((char*)refcount.count, 0, sizeof(refcount.count));
+  refcount.inited = 1;
+}
+
+void
+krefinc(void *pa)
+{
+  uint64 ind=(uint64)pa/4096;
+  
+  acquire(&refcount.lock);
+  // printf("refinc %d count %d\n",ind,refcount.count[ind]);
+  refcount.count[ind]++;
+  release(&refcount.lock);
+}
+
+void
+krefdec(void *pa)
+{
+  uint64 ind=(uint64)pa/4096;
+  acquire(&refcount.lock);
+  // if(refcount.inited==1)
+  //   printf("refdec %d count %d\n",ind,refcount.count[ind]);
+  if(refcount.count[ind]==0 && refcount.inited==1)
+    panic("krefdec:equals to zero");
+  else
+    refcount.count[ind]--;
+  if(refcount.count[ind]==0 || refcount.inited==0){
+    struct run *r;
+    memset(pa, 1, PGSIZE);
+
+    r = (struct run*)pa;
+
+    acquire(&kmem.lock);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    release(&kmem.lock);
+  }
+  release(&refcount.lock);
 }
 
 void
@@ -46,20 +94,11 @@ freerange(void *pa_start, void *pa_end)
 void
 kfree(void *pa)
 {
-  struct run *r;
-
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
-
-  r = (struct run*)pa;
-
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+  krefdec(pa);
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -76,7 +115,9 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r)
+  if(r){
     memset((char*)r, 5, PGSIZE); // fill with junk
+    krefinc(r);
+    }
   return (void*)r;
 }
