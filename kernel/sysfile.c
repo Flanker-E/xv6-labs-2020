@@ -484,3 +484,88 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void){
+  int length, prot, flags, fd;
+  struct file *f;
+  if(argint(1, &length) < 0 || argint(2, &prot) < 0 || argint(3, &flags) < 0 || argfd(4, &fd, &f) < 0){
+    return -1;
+  }
+  if (!(f->writable)&& (prot & PROT_WRITE)&&(flags & MAP_SHARED)){
+    return -1;
+  }
+  struct proc *p=myproc();
+  struct vma *pvma=p->procvma;
+  for(int i=0;i<MAXVMA;i++){
+    if(pvma[i].valid==0)//can init
+    {
+      pvma[i].len=PGROUNDUP(length);
+      pvma[i].addr=p->sz;
+      pvma[i].prot=prot;
+      pvma[i].flags=flags;
+      pvma[i].f=filedup(f);
+      pvma[i].off=0;
+      pvma[i].valid_len=pvma[i].len;
+      pvma[i].valid=1;
+      p->sz+=pvma[i].len;
+      return pvma[i].addr;
+    }
+  }
+  return -1;
+}
+
+uint64
+sys_munmap(void){
+  uint64 addr;
+  int length;
+  if(argaddr(0, &addr) < 0 || argint(1, &length) < 0){
+    return -1;
+  }
+  struct proc *p=myproc();
+  struct vma *pvma=p->procvma;
+  int close=0;
+  // find in vma
+  for (int i=0;i<MAXVMA;i++){
+    if(pvma[i].valid && 
+    pvma[i].addr+pvma[i].off<=addr && 
+    addr<pvma[i].addr+pvma[i].off+pvma[i].valid_len){
+      addr=PGROUNDDOWN(addr);
+      if(addr==pvma[i].addr+pvma[i].off){
+        // at start
+        // pvma[i].valid=0;
+        if(length>=pvma[i].valid_len){
+          pvma[i].valid=0;
+          length=pvma[i].valid_len;
+          pvma[i].valid_len=0;
+          p->sz-=pvma[i].len;
+          close=1;
+        }
+        else{
+          pvma[i].off+=length;
+          pvma[i].valid_len-=length;
+        }
+      }
+      else {
+        // at middle, ummap from middle to end
+        length=pvma[i].addr+pvma[i].off+pvma[i].valid_len-addr;
+        pvma[i].valid_len-=length;
+      }
+      // write file
+      if(pvma[i].flags & MAP_SHARED){
+        if(filewrite_(pvma[i].f,addr,length,addr-pvma[i].addr)==-1)
+          return -1;
+      }
+      uvmunmap(p->pagetable, addr,PGROUNDUP(length)/PGSIZE,0);
+      // close file
+      if(close){
+        fileclose(pvma[i].f);
+      }
+      return 0;
+
+    }
+  }
+  // within range
+
+  return -1;
+}

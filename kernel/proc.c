@@ -283,7 +283,15 @@ fork(void)
   np->sz = p->sz;
 
   np->parent = p;
-
+  for (int i=0;i<MAXVMA;i++){
+    struct vma* pnvma=&np->procvma[i];
+    struct vma* pvma=&p->procvma[i];
+    if(pvma->valid==1){
+      memmove(pnvma,pvma,sizeof(struct  vma));
+      filedup(pvma->f);
+    }
+  }
+  
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 

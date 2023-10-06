@@ -5,6 +5,9 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -67,6 +70,49 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if(r_scause() == 13 || r_scause() == 15){
+    // lazy alloc page fault
+    uint64 va = r_stval();
+    if(va>=p->sz ||va < p->trapframe->sp){
+      //kill process
+      kill(p->pid);
+      p->killed = 1;
+      exit(-1);
+      // panic("usertrap: RAM over use");
+      }
+    struct vma *pvma=p->procvma;
+    va = PGROUNDDOWN(va);
+    for (int i=0;i<MAXVMA;i++){
+      // printf("page fault find %d\n",i);
+      if(pvma[i].valid && 
+      pvma[i].addr+pvma[i].off<=va && 
+      va<pvma[i].addr+pvma[i].off+pvma[i].valid_len){
+        char *mem;
+        // pte_t *pte;
+        mem = kalloc();
+        if(mem == 0){
+          kill(p->pid);
+          p->killed = 1;
+          exit(-1);
+          // uvmdealloc(pagetable, oldsz, oldsz+1);
+          // return 0;
+        }
+        memset(mem, 0, PGSIZE);
+        int flag=(pvma[i].prot<<1)|PTE_U;
+        if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flag) != 0){
+          printf("usertrap: error map a page\n");
+          kfree(mem);
+          uvmdealloc(p->pagetable, va, va+PGSIZE);
+          panic("usertrap: lazy alloc one page fail");
+        }
+        int offset = va - pvma[i].addr;
+        ilock(pvma[i].f->ip);
+        readi(pvma[i].f->ip,1,va,offset,PGSIZE);
+        iunlock(pvma[i].f->ip);
+        printf("read success\n");
+        break;
+      }
+    }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
