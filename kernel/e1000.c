@@ -95,6 +95,7 @@ e1000_init(uint32 *xregs)
 int
 e1000_transmit(struct mbuf *m)
 {
+  printf("e1000 transmit\n");
   //
   // Your code here.
   //
@@ -102,19 +103,67 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
-  
+  acquire(&e1000_lock);
+  uint32 TX_ring_tail = regs[E1000_TDT];
+  // uint32 TX_ring_head = regs[E1000_TDH];
+  // check overflow
+  if (tx_ring[TX_ring_tail].status & E1000_TXD_STAT_DD == 0)
+  {
+    //hasn't finished trans request
+    release(&e1000_lock);
+    return -1;
+  }
+  else if (tx_mbufs[TX_ring_tail]!=0){
+    mbuffree(tx_mbufs[TX_ring_tail]);
+  }
+  //fill in head
+  // uint32 current_head=(TX_ring_head+1)%TX_RING_SIZE;
+  tx_mbufs[TX_ring_tail] = m;
+  tx_ring[TX_ring_tail].addr=(uint64)m->head;
+  tx_ring[TX_ring_tail].length=m->len;
+  tx_ring[TX_ring_tail].cmd|=(E1000_TXD_CMD_EOP|E1000_TXD_CMD_RS);
+  // tx_mbufs[(TX_ring_head+1)%TX_RING_SIZE]->
+
+  regs[E1000_TDT]=(regs[E1000_TDT]+1)%TX_RING_SIZE;
+  release(&e1000_lock);
+  printf("e1000 transmit end\n");
   return 0;
 }
 
 static void
 e1000_recv(void)
 {
+  // printf("e1000 recive\n");
   //
   // Your code here.
   //
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+  // acquire(&e1000_lock);
+  while(1)
+  {
+    uint32 RX_ring_tail = (regs[E1000_RDT]+1)%TX_RING_SIZE;
+    if (rx_ring[RX_ring_tail].status & E1000_RXD_STAT_DD == 0){
+      // release(&e1000_lock);
+      break;
+    }
+    struct mbuf *m = rx_mbufs[RX_ring_tail];
+    // rx_ring[RX_ring_tail].addr=m->head;
+    m->len=rx_ring[RX_ring_tail].length;
+    
+    net_rx(m);
+    m=mbufalloc(0);
+    rx_mbufs[RX_ring_tail] = m;
+    if (!rx_mbufs[RX_ring_tail])
+      panic("e1000");
+    rx_ring[RX_ring_tail].addr = (uint64)m->head;
+    rx_ring[RX_ring_tail].status=0;
+    regs[E1000_RDT]=RX_ring_tail;
+    // 
+  }
+  // release(&e1000_lock);
+  // return;
 }
 
 void
